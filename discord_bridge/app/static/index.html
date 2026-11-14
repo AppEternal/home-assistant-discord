@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Discord Bridge</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+  <header>
+    <h1>Discord Bridge</h1>
+    <div id="status" class="status"></div>
+  </header>
+  <nav class="tabs">
+    <button data-tab="sets" class="active">Message sets</button>
+    <button data-tab="history">Sent messages</button>
+  </nav>
+
+  <main id="tab-sets" class="tab">
+    <aside>
+      <button id="new-set" class="primary wide">+ New message set</button>
+      <ul id="set-list" class="set-list"></ul>
+    </aside>
+    <section id="editor" class="editor hidden">
+      <div class="grid2">
+        <label>Name<input id="f-name" placeholder="Alarm panel"></label>
+        <label>Set ID <small>(used in automations)</small><input id="f-id" placeholder="alarm_panel"></label>
+      </div>
+      <label>Channel ID <small id="channel-hint"></small><input id="f-channel" placeholder="Right-click channel → Copy Channel ID"></label>
+      <label>Message <small id="content-count"></small><textarea id="f-content" rows="4" maxlength="2000"></textarea></label>
+
+      <fieldset>
+        <legend>Embed <small>(optional)</small></legend>
+        <label>Title<input id="f-embed-title"></label>
+        <label>Description<textarea id="f-embed-description" rows="3"></textarea></label>
+        <label class="inline"><input type="checkbox" id="f-embed-use-color"> Color <input type="color" id="f-embed-color" value="#5865f2"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Buttons <small id="button-count"></small></legend>
+        <div id="buttons"></div>
+        <button id="add-button">+ Add button</button>
+      </fieldset>
+
+      <div class="actions">
+        <button id="save" class="primary">Save</button>
+        <input id="send-channel" placeholder="Send to channel (optional override)">
+        <button id="send" class="success">Save &amp; send</button>
+        <span class="spacer"></span>
+        <button id="duplicate">Duplicate</button>
+        <button id="delete" class="danger">Delete</button>
+      </div>
+      <div id="message" class="message hidden"></div>
+
+      <h3>Preview</h3>
+      <div id="preview" class="preview"></div>
+
+      <h3>Use it in Home Assistant</h3>
+      <pre id="yaml" class="yaml"></pre>
+    </section>
+    <section id="empty" class="editor empty">
+      <p>Create a message set to get started. A set is a saved message with buttons that you can send,
+        re-send and update from here or from Home Assistant automations.</p>
+    </section>
+  </main>
+
+  <main id="tab-history" class="tab hidden">
+    <section class="history">
+      <p>Every message sent from here or by the <code>discord_bridge.send_message</code> action. Kept for the last 200 messages.</p>
+      <table>
+        <thead><tr><th>Sent</th><th>Set</th><th>Channel</th><th>Message</th><th>Source</th><th></th></tr></thead>
+        <tbody id="history-rows"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="static/app.js"></script>
+</body>
+</html>

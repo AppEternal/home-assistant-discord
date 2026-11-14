@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+data/
+
+# Local credentials and Home Assistant configuration
+.env
+.env.*
+!.env.example
+secrets.yaml
+options.json
+*.key
+*.pem
+*.p12
+*.pfx
+*.ppk
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+
+# App data and its temporary or recovery files
+message_sets.json*
+sent_messages.json*

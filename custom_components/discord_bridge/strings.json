@@ -1,0 +1,145 @@
+{
+    "config":  {
+                   "step":  {
+                                "user":  {
+                                             "title":  "Discord Bridge",
+                                             "description":  "Adds the Discord Bridge actions and the discord_bridge_interaction event. Install and start the Discord Bridge app too; it connects to this integration automatically."
+                                         }
+                            },
+                   "abort":  {
+                                 "single_instance_allowed":  "Discord Bridge is already set up."
+                             }
+               },
+    "selector":  {
+                     "respond_type":  {
+                                          "options":  {
+                                                          "defer_update":  "Acknowledge silently (defer_update)",
+                                                          "defer_reply":  "Show \"thinkingâ€¦\" (defer_reply)",
+                                                          "reply":  "Reply with a message (reply)",
+                                                          "update_message":  "Edit the clicked message (update_message)"
+                                                      }
+                                      }
+                 },
+    "services":  {
+                     "respond":  {
+                                     "name":  "Respond to button click",
+                                     "description":  "Acknowledge a Discord button click. Call it within ~2 seconds of the event; otherwise the app acknowledges automatically and a reply is sent as a follow-up instead.",
+                                     "fields":  {
+                                                    "interaction_id":  {
+                                                                           "name":  "Interaction ID",
+                                                                           "description":  "From the event: trigger.event.data.interaction_id."
+                                                                       },
+                                                    "type":  {
+                                                                 "name":  "Response type",
+                                                                 "description":  "defer_update shows nothing, defer_reply shows \"thinkingâ€¦\" (replace it later with followup), reply sends a message, update_message edits the message with the buttons."
+                                                             },
+                                                    "ephemeral":  {
+                                                                      "name":  "Only visible to the clicker",
+                                                                      "description":  "For reply and defer_reply."
+                                                                  },
+                                                    "set_id":  {
+                                                                   "name":  "Message set",
+                                                                   "description":  "Use a saved message set as the message."
+                                                               },
+                                                    "content":  {
+                                                                    "name":  "Content",
+                                                                    "description":  "Message text. Overrides the set\u0027s text."
+                                                                },
+                                                    "embed":  {
+                                                                  "name":  "Embed",
+                                                                  "description":  "Embed with title, description and color. Overrides the set\u0027s embed."
+                                                              },
+                                                    "buttons":  {
+                                                                    "name":  "Buttons",
+                                                                    "description":  "List of buttons (label, custom_id, style, emoji, url, disabled). Overrides the set\u0027s buttons; an empty list removes them."
+                                                                }
+                                                }
+                                 },
+                     "followup":  {
+                                      "name":  "Follow up on button click",
+                                      "description":  "Send another message for a button click, up to 15 minutes after it. Replaces the \"thinkingâ€¦\" message after defer_reply.",
+                                      "fields":  {
+                                                     "interaction_id":  {
+                                                                            "name":  "Interaction ID",
+                                                                            "description":  "From the event: trigger.event.data.interaction_id."
+                                                                        },
+                                                     "ephemeral":  {
+                                                                       "name":  "Only visible to the clicker",
+                                                                       "description":  "Only visible to the person who clicked."
+                                                                   },
+                                                     "set_id":  {
+                                                                    "name":  "Message set",
+                                                                    "description":  "Use a saved message set as the message."
+                                                                },
+                                                     "content":  {
+                                                                     "name":  "Content",
+                                                                     "description":  "Message text. Overrides the set\u0027s text."
+                                                                 },
+                                                     "embed":  {
+                                                                   "name":  "Embed",
+                                                                   "description":  "Embed with title, description and color."
+                                                               },
+                                                     "buttons":  {
+                                                                     "name":  "Buttons",
+                                                                     "description":  "List of buttons."
+                                                                 }
+                                                 }
+                                  },
+                     "send_message":  {
+                                          "name":  "Send message",
+                                          "description":  "Send a message, usually a saved message set, to a Discord channel. Returns message_id for later edits.",
+                                          "fields":  {
+                                                         "set_id":  {
+                                                                        "name":  "Message set",
+                                                                        "description":  "ID of a saved message set."
+                                                                    },
+                                                         "channel_id":  {
+                                                                            "name":  "Channel ID",
+                                                                            "description":  "Overrides the set\u0027s channel and the default channel."
+                                                                        },
+                                                         "content":  {
+                                                                         "name":  "Content",
+                                                                         "description":  "Message text. Overrides the set\u0027s text."
+                                                                     },
+                                                         "embed":  {
+                                                                       "name":  "Embed",
+                                                                       "description":  "Embed with title, description and color."
+                                                                   },
+                                                         "buttons":  {
+                                                                         "name":  "Buttons",
+                                                                         "description":  "List of buttons."
+                                                                     }
+                                                     }
+                                      },
+                     "edit_message":  {
+                                          "name":  "Edit message",
+                                          "description":  "Edit a message sent by the bot. With a set, the whole message is replaced; otherwise only the given parts change.",
+                                          "fields":  {
+                                                         "message_id":  {
+                                                                            "name":  "Message ID",
+                                                                            "description":  "ID of the message to edit."
+                                                                        },
+                                                         "channel_id":  {
+                                                                            "name":  "Channel ID",
+                                                                            "description":  "Not needed for messages sent by this app."
+                                                                        },
+                                                         "set_id":  {
+                                                                        "name":  "Message set",
+                                                                        "description":  "Replace the message with this saved set."
+                                                                    },
+                                                         "content":  {
+                                                                         "name":  "Content",
+                                                                         "description":  "New message text."
+                                                                     },
+                                                         "embed":  {
+                                                                       "name":  "Embed",
+                                                                       "description":  "New embed."
+                                                                   },
+                                                         "buttons":  {
+                                                                         "name":  "Buttons",
+                                                                         "description":  "New buttons; an empty list removes them."
+                                                                     }
+                                                     }
+                                      }
+                 }
+}

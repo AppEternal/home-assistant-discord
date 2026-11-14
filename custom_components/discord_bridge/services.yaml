@@ -1,0 +1,110 @@
+respond:
+  fields:
+    interaction_id:
+      required: true
+      example: "{{ trigger.event.data.interaction_id }}"
+      selector:
+        text:
+    type:
+      required: true
+      default: defer_update
+      selector:
+        select:
+          translation_key: respond_type
+          options:
+            - defer_update
+            - defer_reply
+            - reply
+            - update_message
+    ephemeral:
+      default: false
+      selector:
+        boolean:
+    set_id:
+      example: alarm_panel
+      selector:
+        text:
+    content:
+      example: "Alarm armed by {{ trigger.event.data.user_display_name }}"
+      selector:
+        text:
+          multiline: true
+    embed:
+      example: '{"title": "Alarm", "description": "Armed", "color": "#DA373C"}'
+      selector:
+        object:
+    buttons:
+      example: '[{"label": "Disarm", "custom_id": "disarm", "style": "danger"}]'
+      selector:
+        object:
+
+followup:
+  fields:
+    interaction_id:
+      required: true
+      example: "{{ trigger.event.data.interaction_id }}"
+      selector:
+        text:
+    ephemeral:
+      default: false
+      selector:
+        boolean:
+    set_id:
+      selector:
+        text:
+    content:
+      example: "Done ✅"
+      selector:
+        text:
+          multiline: true
+    embed:
+      selector:
+        object:
+    buttons:
+      selector:
+        object:
+
+send_message:
+  fields:
+    set_id:
+      example: alarm_panel
+      selector:
+        text:
+    channel_id:
+      example: "123456789012345678"
+      selector:
+        text:
+    content:
+      selector:
+        text:
+          multiline: true
+    embed:
+      selector:
+        object:
+    buttons:
+      selector:
+        object:
+
+edit_message:
+  fields:
+    message_id:
+      required: true
+      example: "{{ sent.message_id }}"
+      selector:
+        text:
+    channel_id:
+      selector:
+        text:
+    set_id:
+      selector:
+        text:
+    content:
+      selector:
+        text:
+          multiline: true
+    embed:
+      selector:
+        object:
+    buttons:
+      selector:
+        object:

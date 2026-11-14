@@ -1,0 +1,22 @@
+configuration:
+  bot_token:
+    name: Discord bot token
+    description: Token from the Bot page of your Discord application.
+  default_channel_id:
+    name: Default channel ID
+    description: Channel used when a message set or action does not specify one.
+  auto_ack_seconds:
+    name: Auto-acknowledge after (seconds)
+    description: >-
+      Discord needs an answer within 3 seconds. If no automation has called
+      discord_bridge.respond by then, the app acknowledges the click itself.
+  auto_ack_type:
+    name: Auto-acknowledge type
+    description: >-
+      defer_update shows nothing, defer_reply shows "thinking..." publicly,
+      defer_reply_ephemeral shows it only to the clicker.
+  allowed_user_ids:
+    name: Allowed Discord user IDs
+    description: Leave empty to allow everyone who can see the message.
+  log_level:
+    name: Log level

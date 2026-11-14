@@ -1,0 +1,14 @@
+{
+  "domain": "discord_bridge",
+  "name": "Discord Bridge",
+  "codeowners": ["@AppEternal"],
+  "config_flow": true,
+  "dependencies": ["websocket_api"],
+  "documentation": "https://github.com/AppEternal/home-assistant-discord",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/AppEternal/home-assistant-discord/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}
