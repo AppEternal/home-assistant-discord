@@ -115,14 +115,18 @@ class HALink:
     async def _run_command(self, event: dict[str, Any]) -> None:
         request_id = event.get("request_id")
         command = event.get("command", "")
+        # Older integrations don't send an origin.
+        origin = event.get("origin") or "Home Assistant"
+        _LOGGER.info("%s requested by %s", command, origin)
         reply: dict[str, Any] = {"type": "discord_bridge/result", "request_id": request_id}
         try:
             reply["result"] = await self.handler(command, event.get("data") or {})
             reply["success"] = True
         except MessageError as err:
+            _LOGGER.warning("%s requested by %s failed: %s", command, origin, err)
             reply.update(success=False, error=str(err))
         except Exception as err:  # noqa: BLE001
-            _LOGGER.exception("Command %s failed", command)
+            _LOGGER.exception("%s requested by %s failed", command, origin)
             reply.update(success=False, error=f"Unexpected error: {err}")
         await self._send(reply)
 

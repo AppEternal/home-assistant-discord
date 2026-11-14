@@ -36,10 +36,31 @@ ID. Start the app and enable **Show in sidebar**.
 Restart Home Assistant, then **Settings → Devices & services → Add integration → Discord Bridge**.
 Connection status appears in the editor and `binary_sensor.discord_bridge_app_connected`.
 
-## Using it
+## Send your first message
 
-Open **Discord Bridge**, create a message set, and click **Save & send**. The editor
-provides automation YAML below each preview.
+1. Open **Discord Bridge** from the sidebar or the app's **Open Web UI** button.
+   Check that Discord shows connected.
+2. Click **+ New message set**. Enter **Name** `Test` and **Set ID** `test`.
+3. Paste the Discord channel's ID into **Channel ID** and enter `Hello from Home
+   Assistant!` in **Message**. Embeds and buttons are optional.
+4. Click **Save & send**, then check the Discord channel or **Sent messages**.
+
+**Save** only stores the set; **Save & send** posts a new message each time.
+
+### Send from Home Assistant
+
+With both Discord and Home Assistant connected, open **Developer Tools → Actions**,
+switch to YAML, paste this, replace the channel ID, and click **Perform action**:
+
+```yaml
+action: discord_bridge.send_message
+data:
+  channel_id: "YOUR_CHANNEL_ID"
+  content: "Hello from Home Assistant!"
+```
+
+No saved set is required. To send the set above, use `set_id: test` instead of
+`content`. The editor also provides YAML for sending sets and handling buttons.
 
 ### The click event
 
@@ -84,6 +105,17 @@ actions:
       content: "Starting {{ trigger.event.data.button_label }}"
   - action: script.alarm_1
 ```
+
+## Connection warnings
+
+- **Integration not installed or not set up:** complete setup step 3. A later
+  **Connected to the Discord Bridge integration** message confirms recovery.
+- **502 / connection closed:** the Supervisor could not reach Home Assistant,
+  or the connection dropped. This can happen during a restart; the app retries.
+  If it persists, check Home Assistant Core logs.
+- **Guilds intent / PyNaCl / davey:** gateway intents are intentionally disabled
+  and voice is unused. These warnings do not require enabling intents or
+  installing voice packages for sending messages.
 
 ## Security and storage
 

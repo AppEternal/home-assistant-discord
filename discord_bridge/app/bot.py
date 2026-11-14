@@ -165,7 +165,7 @@ class Bridge:
             return
         user_id = str(interaction.user.id)
         if self.allowed_users and user_id not in self.allowed_users:
-            _LOGGER.info("Ignoring click on %s by non-allowed user %s", data.get("custom_id"), user_id)
+            _LOGGER.info("Ignoring click on %s by non-allowed Discord user %s (%s)", data.get("custom_id"), interaction.user.name, user_id)
             await interaction.response.send_message("You are not allowed to use these buttons.", ephemeral=True)
             return
         if not self.ha or not self.ha.connected:
@@ -179,7 +179,10 @@ class Bridge:
         self.pending[str(interaction.id)] = pending
         pending.auto_task = asyncio.create_task(self._auto_ack(pending))
         event = self.event_data(interaction)
-        _LOGGER.info("Button %s clicked by %s", event["custom_id"], event["user_name"])
+        _LOGGER.info(
+            "Button %s clicked by Discord user %s (%s, display name %s) in channel %s",
+            event["custom_id"], event["user_name"], event["user_id"], event["user_display_name"], event["channel_id"],
+        )
         try:
             await self.ha.send_interaction(event)
         except Exception:  # noqa: BLE001
@@ -343,7 +346,7 @@ class Bridge:
                 raise MessageError(f"Channel {channel_id} is not a text channel")
             message = await channel.send(**send_kwargs(spec))
         except discord.HTTPException as err:
-            raise discord_error(err) from err
+            raise MessageError(f"{discord_error(err)} (channel {channel_id})") from err
         record = await self.store.add_record(
             set_id=set_id,
             set_name=(message_set or {}).get("name"),
@@ -375,7 +378,7 @@ class Bridge:
             partial = client.get_partial_messageable(int(channel_id)).get_partial_message(int(message_id))
             await partial.edit(**edit_kwargs(spec))
         except discord.HTTPException as err:
-            raise discord_error(err) from err
+            raise MessageError(f"{discord_error(err)} (channel {channel_id}, message {message_id})") from err
         if record is not None:
             payload = {**(record.get("payload") or {}), **spec}
             await self.store.update_record(

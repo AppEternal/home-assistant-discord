@@ -260,7 +260,7 @@ async def fake_home_assistant(known_commands=True):
     return runner, f"ws://127.0.0.1:{port}/api/websocket", state
 
 
-async def test_ha_link_round_trip():
+async def test_ha_link_round_trip(caplog):
     runner, url, state = await fake_home_assistant()
     seen = []
 
@@ -289,9 +289,11 @@ async def test_ha_link_round_trip():
         assert state["interactions"] == [{"custom_id": "alarm_1"}]
 
         await state["ws"].send_json({"id": state["sub"], "type": "event",
-                                     "event": {"type": "command", "request_id": "r2", "command": "fail", "data": {}}})
+                                     "event": {"type": "command", "request_id": "r2", "command": "fail", "data": {},
+                                               "origin": "automation 'Doorbell' (automation.doorbell)"}})
         result = await asyncio.wait_for(state["results"].get(), 5)
         assert result["success"] is False and result["error"] == "nope"
+        assert "fail requested by automation 'Doorbell' (automation.doorbell) failed: nope" in caplog.text
     finally:
         task.cancel()
         await runner.cleanup()

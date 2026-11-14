@@ -17,6 +17,15 @@ STATIC = Path(__file__).parent / "static"
 INGRESS_IP = ipaddress.ip_address("172.30.32.2")
 
 
+def editor_user(request: web.Request) -> str:
+    """The Home Assistant user behind an ingress request (headers set by the Supervisor)."""
+    headers = request.headers
+    name = headers.get("X-Remote-User-Display-Name") or headers.get("X-Remote-User-Name")
+    if not name:
+        return "editor (unknown user)"
+    return f"editor user '{name}'"
+
+
 def create_app(bridge: Bridge, *, ingress_only: bool) -> web.Application:
     store = bridge.store
 
@@ -32,6 +41,8 @@ def create_app(bridge: Bridge, *, ingress_only: bool) -> web.Application:
         try:
             return await handler(request)
         except MessageError as err:
+            if request.method != "GET":
+                _LOGGER.warning("%s %s by %s failed: %s", request.method, request.path, editor_user(request), err)
             return web.json_response({"error": str(err)}, status=400)
 
     async def body(request: web.Request) -> dict[str, Any]:
@@ -63,8 +74,10 @@ def create_app(bridge: Bridge, *, ingress_only: bool) -> web.Application:
 
     async def send_set(request: web.Request) -> web.Response:
         data = await body(request)
+        set_id = request.match_info["set_id"]
+        _LOGGER.info("Send of set %s requested by %s", set_id, editor_user(request))
         result = await bridge.send_message(
-            {"set_id": request.match_info["set_id"], "channel_id": data.get("channel_id") or None},
+            {"set_id": set_id, "channel_id": data.get("channel_id") or None},
             source="editor",
         )
         return web.json_response(result)
@@ -78,6 +91,9 @@ def create_app(bridge: Bridge, *, ingress_only: bool) -> web.Application:
         set_id = data.get("set_id") or record.get("set_id")
         if not set_id:
             raise MessageError("This message was not sent from a set; choose a set to update it with")
+        _LOGGER.info(
+            "Update of message %s with set %s requested by %s", record["message_id"], set_id, editor_user(request)
+        )
         result = await bridge.edit_message(
             {"message_id": record["message_id"], "channel_id": record["channel_id"], "set_id": set_id},
             source="editor",

@@ -9,8 +9,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 
 # Import before the hass fixture puts its own testing_config/custom_components on sys.path.
@@ -91,6 +92,40 @@ async def test_app_round_trip(hass: HomeAssistant, entry, hass_ws_client):
     await ws.close()
     await hass.async_block_till_done()
     assert hass.states.get(sensor).state == "off"
+
+
+async def test_origin_names_automation_and_discord_user(hass: HomeAssistant, entry, hass_ws_client, hass_admin_user):
+    assert await async_setup_component(hass, "automation", {"automation": {
+        "alias": "Doorbell",
+        "trigger": {"platform": "event", "event_type": "discord_bridge_interaction"},
+        "action": {"action": f"{DOMAIN}.send_message", "data": {"content": "Hi"}},
+    }})
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "discord_bridge/connect", "version": 1})
+    assert (await ws.receive_json())["success"]
+
+    await ws.send_json({"id": 2, "type": "discord_bridge/interaction",
+                        "data": {"custom_id": "a", "user_id": "42", "user_name": "bob"}})
+    messages = [await ws.receive_json(), await ws.receive_json()]
+    command = next(m["event"] for m in messages if m.get("type") == "event")
+    assert command["origin"] == (
+        "automation 'Doorbell' (automation.doorbell), triggered by Discord user bob (42)"
+    )
+    await ws.send_json({"id": 3, "type": "discord_bridge/result", "request_id": command["request_id"],
+                        "success": True, "result": {}})
+    await ws.receive_json()
+
+    call = asyncio.create_task(hass.services.async_call(
+        DOMAIN, "send_message", {"content": "Hi"}, blocking=True, context=Context(user_id=hass_admin_user.id)
+    ))
+    command = (await ws.receive_json())["event"]
+    assert command["origin"] == f"user '{hass_admin_user.name}'"
+    await ws.send_json({"id": 4, "type": "discord_bridge/result", "request_id": command["request_id"],
+                        "success": True, "result": {}})
+    await ws.receive_json()
+    await call
+    await ws.close()
+    await hass.async_block_till_done()
 
 
 async def test_unload_removes_services(hass: HomeAssistant, entry):
