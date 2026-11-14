@@ -1,5 +1,5 @@
 name: Discord Bridge
-version: "0.1.0"
+version: "0.2.0"
 slug: discord_bridge
 description: Discord bot for button messages that trigger Home Assistant automations
 url: https://github.com/AppEternal/home-assistant-discord
