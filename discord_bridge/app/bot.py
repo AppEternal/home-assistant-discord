@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import discord
 
-from .messages import MessageError, render, validate_channel_id
+from .messages import FORM_PREFIX, MessageError, render, validate_channel_id
 from .store import Store
 
 if TYPE_CHECKING:
@@ -35,6 +37,13 @@ BUTTON_STYLES = {
 }
 
 
+def button_custom_id(button: dict[str, Any]) -> str | None:
+    custom_id = button.get("custom_id")
+    if custom_id and button.get("form"):
+        return FORM_PREFIX + hashlib.sha256(custom_id.encode()).hexdigest()
+    return custom_id
+
+
 def build_view(buttons: list[dict[str, Any]]) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     for button in buttons:
@@ -42,7 +51,7 @@ def build_view(buttons: list[dict[str, Any]]) -> discord.ui.View:
             discord.ui.Button(
                 style=BUTTON_STYLES[button["style"]],
                 label=button.get("label") or None,
-                custom_id=button.get("custom_id"),
+                custom_id=button_custom_id(button),
                 url=button.get("url"),
                 emoji=button.get("emoji") or None,
                 disabled=button.get("disabled", False),
@@ -110,6 +119,17 @@ class PendingInteraction:
         return time.monotonic() - self.received > INTERACTION_LIFETIME - 15
 
 
+@dataclass
+class PendingForm:
+    event: dict[str, Any]
+    custom_id: str
+    received: float = field(default_factory=time.monotonic)
+
+    @property
+    def expired(self) -> bool:
+        return time.monotonic() - self.received > INTERACTION_LIFETIME
+
+
 class Bridge:
     def __init__(self, options: dict[str, Any], store: Store) -> None:
         self.options = options
@@ -117,6 +137,7 @@ class Bridge:
         self.ha: HALink | None = None
         self.client: discord.Client | None = None
         self.pending: dict[str, PendingInteraction] = {}
+        self.forms: dict[str, PendingForm] = {}
         self.bot_error: str | None = None
         self.allowed_users = {str(u).strip() for u in options.get("allowed_user_ids") or [] if str(u).strip()}
 
@@ -158,10 +179,13 @@ class Bridge:
 
     # ----------------------------------------------------------- interactions
     async def handle_interaction(self, interaction: Any) -> None:
-        if interaction.type != discord.InteractionType.component:
+        is_form = interaction.type == discord.InteractionType.modal_submit
+        if interaction.type != discord.InteractionType.component and not is_form:
             return
         data = interaction.data or {}
-        if data.get("component_type") != discord.ComponentType.button.value:
+        if not is_form and data.get("component_type") != discord.ComponentType.button.value:
+            return
+        if is_form and not str(data.get("custom_id", "")).startswith(FORM_PREFIX):
             return
         user_id = str(interaction.user.id)
         if self.allowed_users and user_id not in self.allowed_users:
@@ -175,18 +199,84 @@ class Bridge:
             return
 
         self._forget_expired()
-        pending = PendingInteraction(interaction)
+        ack = None
+        if is_form:
+            form = self.forms.get(data.get("custom_id"))
+            if form is None or form.event["user_id"] != user_id:
+                await interaction.response.send_message(
+                    "This form has expired or belongs to another user. Press the button again.", ephemeral=True
+                )
+                return
+            inputs = [
+                child
+                for row in data.get("components", [])
+                for child in ([row["component"]] if "component" in row else row.get("components", []))
+                if child.get("custom_id") == "message"
+            ]
+            text = inputs[0].get("value") if len(inputs) == 1 else None
+            if not isinstance(text, str) or not text.strip() or len(text) > 4000:
+                await interaction.response.send_message(
+                    "Enter a message between 1 and 4000 characters, then try again.", ephemeral=True
+                )
+                return
+            self.forms.pop(data["custom_id"])
+            event = {
+                **form.event,
+                **self.event_data(interaction),
+                "custom_id": form.custom_id,
+                "button_custom_id": form.event["custom_id"],
+                "button_label": form.event["button_label"],
+                "set_id": form.event["set_id"],
+                "message_id": form.event["message_id"],
+                "interaction_type": "modal_submit",
+                "values": {"message": text},
+            }
+        else:
+            event = self.event_data(interaction)
+            if str(data.get("custom_id", "")).startswith(FORM_PREFIX):
+                record = self.store.find_by_message(event["message_id"]) if event["message_id"] else None
+                button = next(
+                    (b for b in (record or {}).get("payload", {}).get("buttons", [])
+                     if button_custom_id(b) == data["custom_id"] and b.get("form")),
+                    None,
+                )
+                if button is None:
+                    await interaction.response.send_message(
+                        "This form's configuration is no longer available. Ask the owner to send or update the message.",
+                        ephemeral=True,
+                    )
+                    return
+                event["custom_id"] = button["custom_id"]
+                await self._open_form(interaction, event, button["form"])
+                ack = "modal"
+        pending = PendingInteraction(interaction, ack=ack)
         self.pending[str(interaction.id)] = pending
-        pending.auto_task = asyncio.create_task(self._auto_ack(pending))
-        event = self.event_data(interaction)
+        if ack is None:
+            pending.auto_task = asyncio.create_task(self._auto_ack(pending))
         _LOGGER.info(
-            "Button %s clicked by Discord user %s (%s, display name %s) in channel %s",
-            event["custom_id"], event["user_name"], event["user_id"], event["user_display_name"], event["channel_id"],
+            "%s for button %s by Discord user %s (%s, display name %s) in channel %s",
+            event["interaction_type"], event["custom_id"], event["user_name"], event["user_id"],
+            event["user_display_name"], event["channel_id"],
         )
         try:
             await self.ha.send_interaction(event)
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Could not forward the interaction to Home Assistant")
+
+    async def _open_form(self, interaction: Any, event: dict[str, Any], form: dict[str, str]) -> None:
+        custom_id = FORM_PREFIX + uuid.uuid4().hex
+        modal = discord.ui.Modal(title=form["title"], custom_id=custom_id, timeout=None)
+        modal.add_item(discord.ui.Label(
+            text=form["label"],
+            component=discord.ui.TextInput(
+                custom_id="message", style=discord.TextStyle.paragraph,
+                placeholder=form["placeholder"] or None, required=True, min_length=1, max_length=4000,
+            ),
+        ))
+        # Like button views, forms are dispatched only through on_interaction.
+        modal.stop()
+        await interaction.response.send_modal(modal)
+        self.forms[custom_id] = PendingForm(event, form["custom_id"])
 
     def event_data(self, interaction: Any) -> dict[str, Any]:
         data = interaction.data or {}
@@ -201,6 +291,7 @@ class Bridge:
                     label = getattr(child, "label", None)
         user = interaction.user
         return {
+            "interaction_type": "button",
             "interaction_id": str(interaction.id),
             "custom_id": custom_id,
             "button_label": label,
@@ -217,6 +308,8 @@ class Bridge:
     def _forget_expired(self) -> None:
         for key in [key for key, item in self.pending.items() if item.expired]:
             self.pending.pop(key, None)
+        for key in [key for key, item in self.forms.items() if item.expired]:
+            self.forms.pop(key, None)
 
     def _get_pending(self, interaction_id: Any) -> PendingInteraction:
         pending = self.pending.get(str(interaction_id))
@@ -250,6 +343,8 @@ class Bridge:
         elif kind == "reply":
             await response.send_message(ephemeral=ephemeral, **send_kwargs(spec))
             pending.original_filled = True
+            if any(button.get("form") for button in spec.get("buttons", [])):
+                await self._remember_form_message(await pending.interaction.original_response(), spec)
         elif kind == "update_message":
             await response.edit_message(**edit_kwargs(spec))
             await self._remember_edit(pending.interaction.message, spec)
@@ -276,7 +371,21 @@ class Bridge:
             pending.original_filled = True
         else:
             message = await interaction.followup.send(wait=True, ephemeral=ephemeral, **send_kwargs(spec))
+        await self._remember_form_message(message, spec)
         return {"acknowledged": pending.ack, "message_id": str(message.id) if message else None}
+
+    async def _remember_form_message(self, message: Any, spec: dict[str, Any]) -> None:
+        if message is None or not any(button.get("form") for button in spec.get("buttons", [])):
+            return
+        record = self.store.find_by_message(str(message.id))
+        if record is not None:
+            await self.store.update_record(record, payload={**(record.get("payload") or {}), **spec})
+            return
+        await self.store.add_record(
+            message_id=str(message.id), channel_id=str(message.channel.id),
+            guild_id=str(message.guild.id) if message.guild else None,
+            set_id=None, set_name=None, jump_url=message.jump_url, source="interaction", payload=spec,
+        )
 
     async def _remember_edit(self, message: Any, spec: dict[str, Any], set_id: str | None = None) -> None:
         if message is None:
@@ -285,6 +394,8 @@ class Bridge:
         if record is not None:
             payload = {**(record.get("payload") or {}), **spec}
             await self.store.update_record(record, payload=payload, set_id=set_id or record.get("set_id"))
+        else:
+            await self._remember_form_message(message, spec)
 
     def _spec_from(self, data: dict[str, Any], *, partial: bool) -> dict[str, Any]:
         set_id = data.get("set_id")
@@ -384,6 +495,8 @@ class Bridge:
             await self.store.update_record(
                 record, payload=payload, set_id=data.get("set_id") or record.get("set_id"), edited_by=source
             )
+        else:
+            await self._remember_form_message(partial, spec)
         return {"message_id": message_id, "channel_id": channel_id}
 
     async def handle_command(self, command: str, data: dict[str, Any]) -> dict[str, Any]:

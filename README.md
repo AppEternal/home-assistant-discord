@@ -64,9 +64,10 @@ No saved set is required. To send the set above, use `set_id: test` instead of
 
 ### The click event
 
-Each click fires `discord_bridge_interaction` with:
+Each normal button click fires `discord_bridge_interaction` with:
 
 - `custom_id`, `button_label`, and `set_id` (when sent from a set)
+- `interaction_type: button` (or `modal_submit` for a submitted form)
 - `interaction_id` and `expires_at` (responses expire after 15 minutes)
 - `user_id`, `user_name`, `user_display_name`, `channel_id`, `guild_id`, and `message_id`
 
@@ -80,8 +81,77 @@ Each click fires `discord_bridge_interaction` with:
 | `discord_bridge.edit_message` | Edit a sent message using a set or selected fields. |
 
 The message actions accept `set_id`, `content`, `embed` (`title`, `description`,
-`color`), and `buttons` (`label`, `custom_id`, `style`, `emoji`, `url`, `disabled`),
+`color`), and `buttons` (`label`, `custom_id`, `style`, `emoji`, `url`, `disabled`, `form`),
 all templatable.
+
+### Button verification / text forms
+
+In the editor, enable **Open text form on click** on a non-link button.
+Set a separate form ID, form title, input label, and optional hint, then **Save &
+send** (or **Update message** in history for an existing message).
+
+Pressing this button immediately opens a Discord pop-up with a required,
+multiline input (1-4000 characters). The click still fires an event with the
+button's `custom_id` and `interaction_type: button`. Submitting fires a second
+event with the **form's** `custom_id`, `interaction_type: modal_submit`, and the
+text in `values.message`. The submission also includes `button_custom_id` and
+the original user/message details. Dismissing the form fires no submission.
+Use each event's own `interaction_id` with the usual `respond`/`followup`
+actions. Opening the form already acknowledges the click, so replying to that
+click sends a follow-up without closing the form.
+
+Forms can also be attached to buttons in action YAML:
+
+```yaml
+action: discord_bridge.send_message
+data:
+  content: "Request an action"
+  buttons:
+    - label: Verify
+      custom_id: verify_request
+      style: primary
+      form:
+        custom_id: verify_message
+        title: Verify your request
+        label: Message
+        placeholder: "Type CONFIRM to continue"
+```
+
+For example, acknowledge the submission, then run an action only for matching
+text (replace the example script with your own):
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: discord_bridge_interaction
+    event_data:
+      custom_id: verify_message
+      interaction_type: modal_submit
+actions:
+  - action: discord_bridge.respond
+    data:
+      interaction_id: "{{ trigger.event.data.interaction_id }}"
+      type: reply
+      ephemeral: true
+      content: "Your message was received."
+  - condition: template
+    value_template: "{{ trigger.event.data['values']['message'] | trim == 'CONFIRM' }}"
+  - action: script.your_verified_action
+```
+
+You can pass `{{ trigger.event.data['values']['message'] }}` to other actions,
+or store it with `input_text.set_value` (respect that helper's length limit).
+For verification, put the protected action in the **form submission**
+automation, not the initial button-click automation.
+Text entry is a confirmation step, not authentication: check `user_id` or set
+`allowed_user_ids` for sensitive actions. Submitted text is included in Home
+Assistant events and may appear in automation traces.
+
+Open forms expire after 15 minutes or an app restart; press the button again.
+Button form settings survive restarts in sent-message history. If a message is
+forgotten or falls outside the last 200 records, its form button is rejected
+until the message is updated or re-sent. Custom IDs beginning with `db_form:`
+are reserved for the bridge.
 
 Discord requires an acknowledgement within 3 seconds. Call `respond` first;
 otherwise the app acknowledges automatically after `auto_ack_seconds` (default

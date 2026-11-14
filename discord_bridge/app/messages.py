@@ -11,6 +11,7 @@ SNOWFLAKE_RE = re.compile(r"^\d{5,25}$")
 BUTTON_STYLES = ("primary", "secondary", "success", "danger", "link")
 MAX_BUTTONS = 25
 BUTTONS_PER_ROW = 5
+FORM_PREFIX = "db_form:"
 
 
 class MessageError(ValueError):
@@ -90,6 +91,8 @@ def normalize_buttons(buttons: Any) -> list[dict[str, Any]]:
             "disabled": bool(raw.get("disabled", False)),
         }
         if style == "link":
+            if raw.get("form") is not None:
+                raise MessageError(f"Button {index}: link buttons cannot open a form")
             url = _str(raw.get("url")).strip()
             if not url.startswith(("https://", "http://", "discord://")):
                 raise MessageError(f"Button {index}: link buttons need a valid URL")
@@ -104,8 +107,30 @@ def normalize_buttons(buttons: Any) -> list[dict[str, Any]]:
                 raise MessageError(f"Duplicate button custom ID: {custom_id}")
             seen.add(custom_id)
             button["custom_id"] = custom_id
+            if raw.get("form") is not None:
+                button["form"] = normalize_form(raw["form"])
+        if button.get("custom_id", "").startswith(FORM_PREFIX):
+            raise MessageError(f"Button {index}: custom IDs starting with {FORM_PREFIX} are reserved")
         result.append(button)
     return result
+
+
+def normalize_form(raw: Any) -> dict[str, str]:
+    """A button form contains one required, multiline message input."""
+    if not isinstance(raw, dict):
+        raise MessageError("Form must be an object with custom_id, title, label and optional placeholder")
+    form = {
+        "custom_id": _str(raw.get("custom_id")).strip(),
+        "title": _str(raw.get("title")).strip(),
+        "label": _str(raw.get("label")).strip(),
+        "placeholder": _str(raw.get("placeholder")),
+    }
+    for key, limit in (("custom_id", 100), ("title", 45), ("label", 45), ("placeholder", 100)):
+        if key != "placeholder" and not form[key]:
+            raise MessageError(f"Form {key} is required")
+        if len(form[key]) > limit:
+            raise MessageError(f"Form {key} is limited to {limit} characters")
+    return form
 
 
 def validate_channel_id(channel_id: Any, *, required: bool = False) -> str:

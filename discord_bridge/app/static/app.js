@@ -118,10 +118,17 @@ function renderButtons() {
   const rows = current.buttons.map((b, i) => {
     const update = (key) => (e) => {
       b[key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
-      if (key === "style") { renderButtons(); }
+      if (key === "style") {
+        if (b.style === "link") delete b.form;
+        renderButtons();
+      }
       changed();
     };
     const isLink = b.style === "link";
+    const formField = (key, label, maxlength) => h("label", {}, label, h("input", {
+      value: b.form[key] || "", maxlength,
+      oninput: (e) => { b.form[key] = e.target.value; changed(); },
+    }));
     return h("div", { class: "btn-row" },
       h("label", {}, `Label`, h("input", { value: b.label || "", oninput: update("label"),
         onblur: () => { if (!isLink && !b.custom_id && b.label) { b.custom_id = uniqueId(slug(b.label)); renderButtons(); changed(); } } })),
@@ -135,7 +142,27 @@ function renderButtons() {
       h("div", { class: "tools" },
         h("button", { class: "small", title: "Move up", disabled: i === 0, onclick: () => move(i, -1) }, "↑"),
         h("button", { class: "small", title: "Move down", disabled: i === current.buttons.length - 1, onclick: () => move(i, 1) }, "↓"),
-        h("button", { class: "small danger", title: "Remove", onclick: () => { current.buttons.splice(i, 1); renderButtons(); changed(); } }, "✕")));
+        h("button", { class: "small danger", title: "Remove", onclick: () => { current.buttons.splice(i, 1); renderButtons(); changed(); } }, "✕")),
+      !isLink ? h("div", { class: "button-form" },
+        h("label", { class: "inline" }, h("input", {
+          type: "checkbox", checked: !!b.form,
+          onchange: (e) => {
+            if (e.target.checked) b.form = {
+              custom_id: `${(b.custom_id || "button").slice(0, 95)}_form`,
+              title: "Verification", label: "Message", placeholder: "",
+            };
+            else delete b.form;
+            renderButtons();
+            changed();
+          },
+        }), "Open text form on click"),
+        b.form ? [
+          formField("custom_id", "Form ID (submission event)", 100),
+          formField("title", "Form title", 45),
+          formField("label", "Input label", 45),
+          formField("placeholder", "Input hint (optional)", 100),
+          h("small", {}, "The click fires the button ID. Submission fires the form ID with values.message."),
+        ] : null) : null);
   });
   $("buttons").replaceChildren(...rows);
   $("button-count").textContent = `(${current.buttons.length}/25, 5 per row)`;
@@ -194,9 +221,16 @@ function renderYaml() {
   let y = `# Send this message from an automation or script\naction: discord_bridge.send_message\ndata:\n  set_id: ${id}\n`;
   y += `  # channel_id: "123456789012345678"   # optional override\n  # content: "Custom text"              # optional override\nresponse_variable: sent\n`;
   if (ids.length) {
-    y += `\n# Automation triggered by the buttons\ntriggers:\n${ids.map((c) => `  - trigger: event\n    event_type: discord_bridge_interaction\n    event_data:\n      custom_id: ${c}\n    id: ${c}\n`).join("")}`;
+    const events = clickable.flatMap((b) => [
+      { custom_id: b.custom_id, type: "button" },
+      ...(b.form ? [{ custom_id: b.form.custom_id, type: "modal_submit" }] : []),
+    ]);
+    y += `\n# Button clicks and form submissions have separate IDs\ntriggers:\n${events.map((event) => `  - trigger: event\n    event_type: discord_bridge_interaction\n    event_data:\n      custom_id: ${JSON.stringify(event.custom_id)}\n      interaction_type: ${event.type}\n    id: ${JSON.stringify(`${event.type}:${event.custom_id}`)}\n`).join("")}`;
     y += `actions:\n  # 1. Acknowledge the click (within ~2 s, otherwise the app does it for you)\n  - action: discord_bridge.respond\n    data:\n      interaction_id: "{{ trigger.event.data.interaction_id }}"\n      type: reply           # defer_update | defer_reply | reply | update_message\n      ephemeral: true\n      content: "Got it, {{ trigger.event.data.user_display_name }}!"\n`;
-    y += `  # 2. Do your thing per button\n  - choose:\n${ids.map((c) => `      - conditions:\n          - condition: trigger\n            id: ${c}\n        sequence: []   # your actions for ${c}\n`).join("")}`;
+    y += `  # 2. Do your thing per button or form\n  - choose:\n${events.map((event) => `      - conditions:\n          - condition: trigger\n            id: ${JSON.stringify(`${event.type}:${event.custom_id}`)}\n        sequence: []   # your actions for ${event.type}\n`).join("")}`;
+    if (clickable.some((b) => b.form)) {
+      y += `  # For form submissions, use the entered text in your actions:\n  # "{{ trigger.event.data['values']['message'] }}"\n`;
+    }
     y += `  # 3. Optionally tell them it is done\n  - action: discord_bridge.followup\n    data:\n      interaction_id: "{{ trigger.event.data.interaction_id }}"\n      ephemeral: true\n      content: "Done ✅"\n`;
   }
   $("yaml").textContent = y;
